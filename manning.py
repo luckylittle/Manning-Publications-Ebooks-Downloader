@@ -132,8 +132,6 @@ def end_script():
 
 if len(sys.argv) > 1:
     main(sys.argv[1:])
-    print(username)
-    print(password)
     create_folder()
     get_list()
     end_script()
