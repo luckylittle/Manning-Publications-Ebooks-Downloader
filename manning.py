@@ -1,8 +1,9 @@
 #!/bin/python3
 
 """
-Date:   Sun Sep 13 10:48:32 UTC 2020
-Author: Lucian Maly
+Date:    Tue Sep 15 12:30:33 UTC 2020
+Author:  Lucian Maly
+License: MIT
 """
 
 import requests
@@ -39,6 +40,7 @@ def main(argv):
             print('Help: `manning.py -h`')
             sys.exit()
 
+
 def create_folder():
     global folder
     datetime_object = datetime.date.today()
@@ -55,7 +57,8 @@ def create_folder():
 
 def get_list():
     with requests.Session() as s:
-        soup1 = BeautifulSoup(s.get(loginURL).text, 'html.parser')
+        # PURPOSE: Get the value of LT
+        soup0 = BeautifulSoup(s.get(loginURL).text, 'html.parser')
         headers = {
             'Origin': 'https://login.manning.com',
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36'
@@ -63,47 +66,40 @@ def get_list():
         data = {
             'username': username,
             'password': password,
-            'lt': soup1.find('input', {'name': 'lt'}).get('value'),
+            'lt': soup0.find('input', {'name': 'lt'}).get('value'),
             'execution': 'e1s1',
             '_eventId': 'submit',
             'submit': ''
         }
+        # PURPOSE: Log in
         s.post(loginURL, cookies=s.cookies, headers=headers, data=data)
         dashboard = s.get(dashboardURL)
-        soup2 = BeautifulSoup(dashboard.text, 'html.parser')
-        div_container = soup2.find('table', {'id': 'productTable'})
+        # PURPOSE: Parse the dashboard with up to 999 products
+        soup = BeautifulSoup(dashboard.text, 'html.parser')
+        div_container = soup.find('table', {'id': 'productTable'})
         for product in div_container.find_all('tr', {'class': 'license-row'}):
             try:
-                # example: Understanding API Security
+                # EXAMPLE: Terraform in Action
                 title = str(product.find(
                     'div', {'class': 'product-title'}).text.strip())
-                # example: richer2
-                user = str(product.find(
+                # EXAMPLE: winkler
+                author = str(product.find(
                     'form', {'class': 'download-form'})['name']).split('-')[1]
-                # example: richer2-restrictedDownloadIds
-                checkbox = str(user + '-restrictedDownloadIds')
-                # example: 1607
-                pdf_id = product.find('input', {'name': checkbox})['value']
-                # example: 4539985
-                pdf_value = product.find('input', {'id': pdf_id})['value']
-                # example: 1608
-                epub_id = str(int(pdf_id) + 1)
-                # example: 4539986
-                epub_value = str(int(pdf_value) + 1)
-                # example: 1609
-                kindle_id = str(int(pdf_id) + 2)
-                # example: 4539987
-                kindle_value = str(int(pdf_value) + 2)
+                restrictedDownloadIds = author + '-restrictedDownloadIds'
                 download_payload = [
                     ('dropbox', 'false'),
-                    (checkbox, pdf_id),
-                    (pdf_id, pdf_value),
-                    (checkbox, epub_id),
-                    (epub_id, epub_value),
-                    (checkbox, kindle_id),
-                    (kindle_id, kindle_value),
-                    ('productExternalId', user)
+                    ('productExternalId', author)
                 ]
+                # PURPOSE: Find all the restrictedDownloadIds and create a complete payload
+                for downloadSelection in product.find_all('div', {'class': 'download-selection'}):
+                    hidden = downloadSelection.find_all(
+                        'input', {'type': 'hidden'})
+                    for val in hidden:
+                        checkbox1 = (val['id'], val['value'])
+                        checkbox2 = (restrictedDownloadIds, val['id'])
+                        download_payload.append(checkbox1)
+                        download_payload.append(checkbox2)
+                        # EXAMPLE: [('dropbox', 'false'), ('productExternalId', 'winkler'), ('1971', '7850702'), ('winkler-restrictedDownloadIds', '1971'), ('1972', '7850703'), ('winkler-restrictedDownloadIds', '1972'), ('1973', '7850704'), ('winkler-restrictedDownloadIds', '1973')]
                 try:
                     subfolder = str(title.replace(' ', '_'))
                     path = os.path.join(folder, subfolder)
@@ -114,10 +110,16 @@ def get_list():
                         print(f'Directory {path} already exists.')
                     else:
                         raise
-                downloadURL = 'https://www.manning.com/dashboard/download?id=downloadForm-' + user
+                downloadURL = 'https://www.manning.com/dashboard/download?id=downloadForm-' + author
+                print('Downloading', title, '...')
                 dl = s.post(downloadURL, cookies=s.cookies,
                             headers=headers, data=download_payload)
-                filename = path + '/' + subfolder + '.zip'
+                # PURPOSE: Some free titles are only in PDF format, this can be determined from the amount of hidden inputs
+                if len(download_payload) <= 4:
+                    extension = '.pdf'
+                else:
+                    extension = '.zip'
+                filename = path + '/' + subfolder + extension
                 file = open(filename, "wb")
                 file.write(dl.content)
                 file.close()
