@@ -1,8 +1,8 @@
-#!/bin/python3
+#!venv/bin/python3
 
 """
-Date:    Tue Sep 15 12:30:33 UTC 2020
-Author:  Lucian Maly
+Date:    Wed May 12 02:56:46 UTC 2021
+Author:  Lucian Maly <lucian@redhat.com>
 License: MIT
 """
 
@@ -15,27 +15,46 @@ import sys
 import getopt
 
 loginURL = 'https://login.manning.com/login?service=https://www.manning.com/login/cas'
-dashboardURL = 'https://www.manning.com/dashboard/index?filter=book&max=999&order=lastUpdated&sort=desc'
+
+# Defaults
+limit = 5
+sortby = 'lastUpdated'
 
 
 def main(argv):
     global username
     global password
+    global limit
+    global sortby
     username = ''
     password = ''
     try:
-        opts, args = getopt.getopt(argv, "hu:p:", ["username=", "password="])
+        opts, args = getopt.getopt(
+            argv, "hu:p:", ["username=", "password=", "limit=", "sort-by="])
     except getopt.GetoptError:
-        print('Usage: `manning.py -u <email> -p <password>`')
+        print(
+            'Usage: `manning.py -u <EMAIL> -p <PASSWORD> [--limit <1-999>] [--sort-by <title,purchaseDate,lastUpdated>]`')
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
-            print('Usage: `manning.py -u <email> -p <password>`')
+            print(
+                'Usage: `manning.py -u <EMAIL> -p <PASSWORD> [--limit <1-999>] [--sort-by <title,purchaseDate,lastUpdated>]`')
             sys.exit()
         elif opt in ("-u", "--username"):
             username = arg
         elif opt in ("-p", "--password"):
             password = arg
+        elif opt in ("--limit"):
+            limit = arg
+            if not limit.isdigit():
+                print('Not an integer 1-999!')
+                sys.exit()
+        elif opt in ("--sort-by"):
+            sortby = arg
+            if (not sortby == 'title') and (not sortby == 'purchaseDate') and (not sortby == 'lastUpdated'):
+                print(
+                    'Wrong option. Must be one of the following: `title`, `purchaseDate` or `lastUpdated`')
+                sys.exit()
         else:
             print('Help: `manning.py -h`')
             sys.exit()
@@ -56,23 +75,26 @@ def create_folder():
 
 
 def get_list():
+    dashboardURL = 'https://www.manning.com/dashboard/index?filter=book&max=' + \
+        str(limit)+'&order='+sortby+'&sort=desc'
     with requests.Session() as s:
         # PURPOSE: Get the value of LT
-        soup0 = BeautifulSoup(s.get(loginURL).text, 'html.parser')
+        # soup0 = BeautifulSoup(s.get(loginURL).text, 'html.parser')
         headers = {
-            'Origin': 'https://login.manning.com',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36'
+            'Origin': 'https://login.manning.com/',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36'
         }
         data = {
             'username': username,
             'password': password,
-            'lt': soup0.find('input', {'name': 'lt'}).get('value'),
+            # 'lt': soup0.find('input', {'name': 'lt'}).get('value'),
             'execution': 'e1s1',
             '_eventId': 'submit',
+            'geolocation': '',
             'submit': ''
         }
         # PURPOSE: Log in
-        s.post(loginURL, cookies=s.cookies, headers=headers, data=data)
+        s.post('https://login.manning.com/login', cookies=s.cookies, headers=headers, data=data)
         dashboard = s.get(dashboardURL)
         # PURPOSE: Parse the dashboard with up to 999 products
         soup = BeautifulSoup(dashboard.text, 'html.parser')
@@ -134,7 +156,7 @@ def end_script():
 
 if len(sys.argv) > 1:
     main(sys.argv[1:])
-    create_folder()
+    # create_folder()
     get_list()
     end_script()
 else:
